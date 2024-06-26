@@ -35,7 +35,7 @@ using namespace z3;
 
 /// TODO: Implement your context-sensitive ICFG traversal here to traverse each program path (once for any loop) from
 /// You will need to collect each path from src node to snk node and then add the path to the `paths` set by
-/// calling the `collectAndTranslatePath` method, in which translatePath method is called. 
+/// calling the `collectAndTranslatePath` method which is then trigger the path translation.
 /// This implementation, slightly different from Assignment-1, requires ICFGNode* as the first argument.
 void SSE::reachability(const ICFGEdge* curEdge, const ICFGNode* snk) {
 	/// TODO: your code starts from here
@@ -70,7 +70,7 @@ bool SSE::handleRet(const RetCFGEdge* retEdge) {
 ///       	     ICFGNode1 (condition %cmp)
 ///       	     1	/    \  0
 ///       	  ICFGNode2   ICFGNode3
-/// edge->getCondition() returns the branch condition variable (%cmp) of type SVFValue* (for if/else) or a numeric condition variable (for switch). 
+/// edge->getCondition() returns the branch condition variable (%cmp) of type SVFValue* (for if/else) or a numeric condition variable (for switch).
 /// Given the condition variable, you could obtain the SVFVar ID via "svfir->getValueNode(edge->getCondition())""
 /// edge->getCondition() returns nullptr if this IntraCFGEdge is not a branch.
 /// edge->getSuccessorCondValue() returns the actual condition value (1/0 for if/else) when this branch/IntraCFGEdge is executed. For example, the successorCondValue is 1 on the edge from ICFGNode1 to ICFGNode2, and 0 on the edge from ICFGNode1 to ICFGNode3
@@ -159,10 +159,6 @@ bool SSE::handleNonBranch(const IntraCFGEdge* edge) {
 				assert(false && "implement this part");
 			}
 		}
-		else if (const BranchStmt *br = SVFUtil::dyn_cast<BranchStmt>(stmt))
-		{
-			DBOP(std::cout << "\t skip handled when traversal Conditional IntraCFGEdge \n");
-		}
 		else if (const SelectStmt *select = SVFUtil::dyn_cast<SelectStmt>(stmt)) {
 			expr res = getZ3Expr(select->getResID());
 			expr tval = getZ3Expr(select->getTrueValue()->getId());
@@ -183,6 +179,9 @@ bool SSE::handleNonBranch(const IntraCFGEdge* edge) {
 				}
 			}
 			assert(opINodeFound && "predecessor ICFGNode of this PhiStmt not found?");
+		}
+		else {
+			DBOP(std::cout << "\t skip handled when traversal Conditional IntraCFGEdge \n");
 		}
 	}
 
