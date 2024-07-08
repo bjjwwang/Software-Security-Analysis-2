@@ -53,10 +53,9 @@ Map<s32_t, s32_t> _switch_lhsrhs_predicate = {
  * based on the characteristics of the memory object associated with the variable. It handles constant data,
  * constant arrays, constant structures, and other types appropriately.
  *
- * @param as The abstract state to be updated
  * @param objVar The object variable to be initialized
  */
-void AbstractExecution::initObjVar(AbstractState& as, ObjVar* objVar) {
+void AEState::initObjVar(ObjVar* objVar) {
 	NodeID varId = objVar->getId();
 
 	// Check if the object variable has an associated value
@@ -67,34 +66,33 @@ void AbstractExecution::initObjVar(AbstractState& as, ObjVar* objVar) {
 		if (obj->isConstDataOrConstGlobal() || obj->isConstantArray() || obj->isConstantStruct()) {
 			if (const SVFConstantInt* consInt = SVFUtil::dyn_cast<SVFConstantInt>(obj->getValue())) {
 				s64_t numeral = consInt->getSExtValue();
-				as[varId] = IntervalValue(numeral, numeral);
+				(*this)[varId] = IntervalValue(numeral, numeral);
 			}
 			else if (const SVFConstantFP* consFP = SVFUtil::dyn_cast<SVFConstantFP>(obj->getValue())) {
-				as[varId] = IntervalValue(consFP->getFPValue(), consFP->getFPValue());
+				(*this)[varId] = IntervalValue(consFP->getFPValue(), consFP->getFPValue());
 			}
 			else if (SVFUtil::isa<SVFConstantNullPtr>(obj->getValue())) {
-				as[varId] = IntervalValue(0, 0);
+				(*this)[varId] = IntervalValue(0, 0);
 			}
 			else if (SVFUtil::isa<SVFGlobalValue>(obj->getValue())) {
-				as[varId] = AddressValue(AbstractState::getVirtualMemAddress(varId));
+				(*this)[varId] = AddressValue(AEState::getVirtualMemAddress(varId));
 			}
 			else if (obj->isConstantArray() || obj->isConstantStruct()) {
-				as[varId] = IntervalValue::top();
+				(*this)[varId] = IntervalValue::top();
 			}
 			else {
-				as[varId] = IntervalValue::top();
+				(*this)[varId] = IntervalValue::top();
 			}
 		}
 		// Handle non-constant memory objects
 		else {
-			as[varId] = AddressValue(AbstractState::getVirtualMemAddress(varId));
+			(*this)[varId] = AddressValue(AEState::getVirtualMemAddress(varId));
 		}
 	}
 	// If the object variable does not have an associated value, set it to a virtual memory address
 	else {
-		as[varId] = AddressValue(AbstractState::getVirtualMemAddress(varId));
+		(*this)[varId] = AddressValue(AEState::getVirtualMemAddress(varId));
 	}
-
 	return;
 }
 
@@ -135,28 +133,38 @@ void AbstractExecution::initWTO() {
 }
 
 /**
- * @brief Get the address value for a GEP (GetElementPtr) object
+ * @brief Get the address values for a range of offsets for a GEP (GetElementPtr) object
  *
- * This function calculates the address value for a GEP object given the abstract state, a pointer, and an offset.
- * It processes the addresses associated with the pointer and adjusts them based on the given offset.
+ * This function calculates the address values for a GEP object given the abstract state,
+ * a pointer, and a range of offsets. It processes the addresses associated with the
+ * base pointer and applies each offset within the specified interval to calculate
+ * the resulting address values.
  *
- * @param as The current abstract state
  * @param pointer The pointer to the base address
- * @param offset The offset to be applied to the base address
- * @return AddressValue The calculated address value for the GEP object
+ * @param offset The interval of offsets to be applied to the base address
+ * @return AddressValue The set of calculated address values for the GEP object within the specified interval
  */
-AddressValue AbstractExecution::getGepObjAddress(AbstractState& as, u32_t pointer, APOffset offset) {
-	AbstractValue addrs = as[pointer];
-	AddressValue ret = AddressValue();
-	for (const auto& addr : addrs.getAddrs()) {
-		s64_t baseObj = AbstractState::getInternalID(addr);
-		assert(SVFUtil::isa<ObjVar>(_svfir->getGNode(baseObj)) && "Fail to get the base object address!");
-		NodeID gepObj = _svfir->getGepObjVar(baseObj, offset);
-		as[gepObj] = AddressValue(AbstractState::getVirtualMemAddress(gepObj));
-		ret.insert(AbstractState::getVirtualMemAddress(gepObj));
+AddressValue AEState::getGepObjAddrs(u32_t pointer, IntervalValue offset) {
+	AddressValue gepAddrs;
+	APOffset lb = offset.lb().getIntNumeral() < Options::MaxFieldLimit()?
+	                                                                     offset.lb().getIntNumeral(): Options::MaxFieldLimit();
+	APOffset ub = offset.ub().getIntNumeral() < Options::MaxFieldLimit()?
+	                                                                     offset.ub().getIntNumeral(): Options::MaxFieldLimit();
+	for (APOffset i = lb; i <= ub; i++)
+	{
+		AbstractValue addrs = (*this)[pointer];
+		for (const auto& addr : addrs.getAddrs()) {
+			s64_t baseObj = AEState::getInternalID(addr);
+			assert(SVFUtil::isa<ObjVar>(PAG::getPAG()->getGNode(baseObj)) && "Fail to get the base object address!");
+			NodeID gepObj = PAG::getPAG()->getGepObjVar(baseObj, i);
+			(*this)[gepObj] = AddressValue(AEState::getVirtualMemAddress(gepObj));
+			gepAddrs.insert(AEState::getVirtualMemAddress(gepObj));
+		}
 	}
-	return ret;
+
+	return gepAddrs;
 }
+
 
 /**
  * @brief Get the byte offset interval for a given abstract state and GEP statement
@@ -168,11 +176,10 @@ AddressValue AbstractExecution::getGepObjAddress(AbstractState& as, u32_t pointe
  * e.g. int arr[20]; int idx = 10; arr[idx] => arr[idx] is a GEP statement, idx is an offset variable,
  * call getByteOffset(as, gep) to get the byte offset interval for arr[idx] (10*4 = 40 Bytes, [40,40])
  *
- * @param as The abstract state, which contains a mapping of value nodes to their corresponding interval values
  * @param gep The GEP statement for which the byte offset is to be calculated
  * @return IntervalValue The interval value of the byte offset
  */
-IntervalValue AbstractExecution::getByteOffset(const AbstractState& as, const GepStmt* gep) {
+IntervalValue AEState::getByteOffset(const GepStmt* gep) {
 	// If the GEP statement has a constant byte offset, return it directly as the interval value
 	if (gep->isConstantOffset())
 		return IntervalValue((s64_t)gep->accumulateConstantByteOffset());
@@ -202,8 +209,8 @@ IntervalValue AbstractExecution::getByteOffset(const AbstractState& as, const Ge
 				res = res + IntervalValue(lb, lb);
 			}
 			else {
-				u32_t idx = _svfir->getValueNode(idxOperandVar->getValue());
-				IntervalValue idxVal = as[idx].getInterval();
+				u32_t idx = PAG::getPAG()->getValueNode(idxOperandVar->getValue());
+				IntervalValue idxVal = (*this)[idx].getInterval();
 
 				if (idxVal.isBottom())
 					res = res + IntervalValue(0, 0);
@@ -242,11 +249,10 @@ IntervalValue AbstractExecution::getByteOffset(const AbstractState& as, const Ge
  * e.g. int arr[20]; int idx = 10; arr[idx] => arr[idx] is a GEP statement, idx is an offset variable,
  * call this function with the abstract state and GEP statement, the function will return the interval of idx ([10,10]);
  *
- * @param as The abstract state, which contains a mapping of value nodes to their corresponding interval values
  * @param gep The GEP statement for which the element index is to be calculated
  * @return IntervalValue The interval value of the element index
  */
-IntervalValue AbstractExecution::getElementIndex(const AbstractState& as, const GepStmt* gep) {
+IntervalValue AEState::getElementIndex(const GepStmt* gep)  {
 	// If the GEP statement has a constant offset, return it directly as the interval value
 	if (gep->isConstantOffset())
 		return IntervalValue((s64_t)gep->accumulateConstantOffset());
@@ -266,7 +272,7 @@ IntervalValue AbstractExecution::getElementIndex(const AbstractState& as, const 
 		if (const SVFConstantInt* constInt = SVFUtil::dyn_cast<SVFConstantInt>(value))
 			idxLb = idxUb = constInt->getSExtValue();
 		else {
-			IntervalValue idxItv = as[_svfir->getValueNode(value)].getInterval();
+			IntervalValue idxItv = (*this)[PAG::getPAG()->getValueNode(value)].getInterval();
 			if (idxItv.isBottom())
 				idxLb = idxUb = 0;
 			else {
@@ -321,7 +327,7 @@ IntervalValue AbstractExecution::getElementIndex(const AbstractState& as, const 
  * @param block The ICFG node (block) for which the state propagation is attempted
  * @return bool True if the state propagation is feasible and successful, false otherwise
  */
-bool AbstractExecution::mergeStatesFromPredecessors(const ICFGNode* block, AbstractState& as) {
+bool AbstractExecution::mergeStatesFromPredecessors(const ICFGNode* block, AEState& as) {
 	u32_t inEdgeNum = 0; // Initialize the number of incoming edges with feasible states
 
 	// Iterate over all incoming edges of the given block
@@ -332,7 +338,7 @@ bool AbstractExecution::mergeStatesFromPredecessors(const ICFGNode* block, Abstr
 
 			// If the edge is an intra-block edge and has a condition
 			if (intraCfgEdge && intraCfgEdge->getCondition()) {
-				AbstractState tmpEs = _postAbsTrace[edge->getSrcNode()];
+				AEState tmpEs = _postAbsTrace[edge->getSrcNode()];
 				// Check if the branch condition is feasible
 				if (isBranchFeasible(intraCfgEdge, tmpEs)) {
 					as.joinWith(tmpEs); // Merge the state with the current state
@@ -359,8 +365,8 @@ bool AbstractExecution::mergeStatesFromPredecessors(const ICFGNode* block, Abstr
 	assert(false && "implement this part"); // This part should not be reached
 }
 
-bool AbstractExecution::isCmpBranchFeasible(const CmpStmt* cmpStmt, s64_t succ, AbstractState& as) {
-	AbstractState new_es = as;
+bool AbstractExecution::isCmpBranchFeasible(const CmpStmt* cmpStmt, s64_t succ, AEState& as) {
+	AEState new_es = as;
 	// get cmp stmt's op0, op1, and predicate
 	NodeID op0 = cmpStmt->getOpVarID(0);
 	NodeID op1 = cmpStmt->getOpVarID(1);
@@ -487,7 +493,7 @@ bool AbstractExecution::isCmpBranchFeasible(const CmpStmt* cmpStmt, s64_t succ, 
 	}
 
 	for (const auto& addr : addrs) {
-		NodeID objId = SVF::AbstractState::getInternalID(addr);
+		NodeID objId = SVF::AEState::getInternalID(addr);
 		if (new_es.inAddrToValTable(objId)) {
 			switch (predicate) {
 			case CmpStmt::Predicate::ICMP_EQ:
@@ -543,8 +549,8 @@ bool AbstractExecution::isCmpBranchFeasible(const CmpStmt* cmpStmt, s64_t succ, 
 	return true;
 }
 
-bool AbstractExecution::isSwitchBranchFeasible(const SVFVar* var, s64_t succ, AbstractState& as) {
-	AbstractState new_es = as;
+bool AbstractExecution::isSwitchBranchFeasible(const SVFVar* var, s64_t succ, AEState& as) {
+	AEState new_es = as;
 	IntervalValue& switch_cond = new_es[var->getId()].getInterval();
 	s64_t value = succ;
 	FIFOWorkList<const SVFStmt*> workList;
@@ -565,7 +571,7 @@ bool AbstractExecution::isSwitchBranchFeasible(const SVFVar* var, s64_t succ, Ab
 			if (new_es.inVarToAddrsTable(load->getRHSVarID())) {
 				AddressValue& addrs = new_es[load->getRHSVarID()].getAddrs();
 				for (const auto& addr : addrs) {
-					NodeID objId = SVF::AbstractState::getInternalID(addr);
+					NodeID objId = SVF::AEState::getInternalID(addr);
 					if (new_es.inAddrToValTable(objId)) {
 						new_es.load(addr).meet_with(switch_cond);
 					}
@@ -577,7 +583,7 @@ bool AbstractExecution::isSwitchBranchFeasible(const SVFVar* var, s64_t succ, Ab
 	return true;
 }
 
-bool AbstractExecution::isBranchFeasible(const IntraCFGEdge* intraEdge, AbstractState& as) {
+bool AbstractExecution::isBranchFeasible(const IntraCFGEdge* intraEdge, AEState& as) {
 	const SVFValue* cond = intraEdge->getCondition();
 	NodeID cmpID = _svfir->getValueNode(cond);
 	SVFVar* cmpVar = _svfir->getGNode(cmpID);
@@ -598,7 +604,7 @@ bool AbstractExecution::isBranchFeasible(const IntraCFGEdge* intraEdge, Abstract
 
 /// handle global node
 void AbstractExecution::handleGlobalNode() {
-	AbstractState as;
+	AEState as;
 	const ICFGNode* node = _icfg->getGlobalICFGNode();
 	_postAbsTrace[node] = _preAbsTrace[node];
 	_postAbsTrace[node][0] = AddressValue();

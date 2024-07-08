@@ -25,7 +25,7 @@
 //
 
 #include "AE/Core/ICFGWTO.h"
-#include "AE/Svfexe/SVFIR2AbsState.h"
+#include "AE/Core/AbstractState.h"
 #include "Util/SVFBugReport.h"
 #include "WPA/Andersen.h"
 
@@ -34,6 +34,34 @@ namespace SVF {
 	class IntervalValue;
 	class ExeState;
 	class SVFIR2ItvExeState;
+
+	class AEState: public AbstractState {
+	 public:
+		AbstractValue loadValue(NodeID varId) {
+			AbstractValue res;
+			for (auto addr : (*this)[varId].getAddrs()) {
+				res.join_with(load(addr)); // q = *p
+			}
+			return res;
+		}
+
+		void storeValue(NodeID varId, AbstractValue val) {
+			for (auto addr : (*this)[varId].getAddrs()) {
+				store(addr, val); // *p = q
+			}
+		}
+
+		AEState widening(const AEState& other) {
+			AbstractState widened = AbstractState::widening(other);
+			return AEState(static_cast<const AEState&>(widened));
+		}
+
+		AEState narrowing(const AEState& other) {
+			AbstractState narrowed = AbstractState::narrowing(other);
+			return AEState(static_cast<const AEState&>(narrowed));
+		}
+
+	};
 
 	class AbstractExecutionMgr {
 	 public:
@@ -115,8 +143,6 @@ namespace SVF {
 			}
 		}
 
-		void getExitState(AbstractState& es, NodeID x);
-
 		bool svf_assert(AbstractValue absv) {
 			IntervalValue iv = absv.getInterval();
 			if (iv.is_numeral()) {
@@ -137,7 +163,7 @@ namespace SVF {
 		static u32_t currentExprIdx;
 
 	 private:
-		AbstractState as;
+		AEState as;
 		Map<std::string, NodeID> _strToID;
 	};
 } // namespace SVF

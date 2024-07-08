@@ -235,8 +235,8 @@ void AbstractExecution::updateStateOnGep(const GepStmt* gep) {
 /// Abstract state updates on an AddrStmt
 void AbstractExecution::updateStateOnAddr(const AddrStmt* addr) {
 	const ICFGNode* node = addr->getICFGNode();
-	AbstractState& as = getAbsState(node);
-	initObjVar(as, SVFUtil::cast<ObjVar>(addr->getRHSVar()));
+	AEState& as = getAbsState(node);
+	as.initObjVar(SVFUtil::cast<ObjVar>(addr->getRHSVar()));
 	as[addr->getLHSVarID()] = as[addr->getRHSVarID()];
 }
 

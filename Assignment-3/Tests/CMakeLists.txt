@@ -1,6 +1,6 @@
 include_directories(../ ${Z3MGR_DIR})
 add_executable(ass3 test-ae.cpp)
-target_link_libraries(ass3 ${LIB} assign3)
+target_link_libraries(ass3 ${LIB} assign-3)
 set_target_properties(ass3 PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
