@@ -86,8 +86,8 @@ namespace SVF {
 
 		void analyse();
 
-		virtual bool handleCall(const CallCFGEdge* call);
-		virtual bool handleRet(const RetCFGEdge* ret);
+		virtual void handleCall(const CallCFGEdge* call);
+		virtual void handleRet(const RetCFGEdge* ret);
 		virtual bool handleIntra(const IntraCFGEdge* edge) {
 			if (edge->getCondition()) {
 				if (handleBranch(edge) == false)

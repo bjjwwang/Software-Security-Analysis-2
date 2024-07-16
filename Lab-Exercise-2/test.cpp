@@ -31,9 +31,22 @@
 using namespace z3;
 using namespace SVF;
 using namespace SVFUtil;
+
+// For assert (Q), add Q to solver
+bool checkNegateAssert(Z3Examples* z3Mgr, z3::expr q) {
+
+	// negative check
+	z3Mgr->getSolver().push();
+	z3Mgr->addToSolver(!q);
+	z3Mgr->getSolver().check();
+	bool res = z3Mgr->getSolver().check() == z3::unsat;
+	z3Mgr->getSolver().pop();
+	return res;
+}
+
 /*
- // Please set the "program": "${workspaceFolder}/bin/ass3" in file '.vscode/launch.json'
- // To run your testcase from 1-7, please set the string number for "args" in file'.vscode/launch.json'
+ // Please set the "program": "${workspaceFolder}/bin/lab2" in file '.vscode/launch.json'
+ // To run your testcase from 1-10, please set the string number for "args" in file'.vscode/launch.json'
  // e.g. To run test0, set "args": ["0"] in file'.vscode/launch.json'
  */
 int main(int argc, char** argv) {
@@ -44,18 +57,33 @@ int main(int argc, char** argv) {
 	Z3Examples* z3Mgr = new Z3Examples(1000);
 	bool result;
 	std::string test_name = argv[1];
+	// Validate assert (i.e b>0) by proving non-existence of counterexamples,
+	// Note that the validation code in `test1()` to `test2()` is not meant to be complete. Given a program prog and an assert `Q`,
+	// you are expected to (1) translate the negation of `Q` and check unsat of `prog ∧ ¬Q` to prove the non-existence of counterexamples, and
+	// (2) also evaluate individual variables’ values (e.g., `a`) if you know `a`’s value is 3. For example, z3Mgr->getEvalExpr(`a`) == 3.
 	if (test_name == "test1") {
-		z3Mgr->test1();
-		result = z3Mgr->hasZ3Expr("b") && z3Mgr->getEvalExpr(z3Mgr->getZ3Expr("b") == z3Mgr->getZ3Expr(1)).is_true();
+		z3Mgr->test1(); // simple integers
+		//  assert(b > 0);
+		z3::expr q = (z3Mgr->getZ3Expr("b") > z3Mgr->getZ3Expr(0));
+		bool res1 = checkNegateAssert(z3Mgr, q);
+		bool res2 = z3Mgr->hasZ3Expr("b") && z3Mgr->z3Expr2NumValue(z3Mgr->getZ3Expr("b")) == 1;
+		result = res1 && res2;
 	}
 	else if (test_name == "test2") {
-		z3Mgr->test2();
-		result = z3Mgr->hasZ3Expr("b") && z3Mgr->getEvalExpr(z3Mgr->getZ3Expr("b") == z3Mgr->getZ3Expr(4)).is_true();
+		z3Mgr->test2(); // one-level pointers
+		//   assert(b > 3);
+		z3::expr q = (z3Mgr->getZ3Expr("b") > z3Mgr->getZ3Expr(3));
+		bool res1 = checkNegateAssert(z3Mgr, q);
+		bool res2 = z3Mgr->hasZ3Expr("b") && z3Mgr->z3Expr2NumValue(z3Mgr->getZ3Expr("b")) == 4;
+		result = res1 && res2;
 	}
 	else if (test_name == "test3") {
-		z3Mgr->test3();
-		result = z3Mgr->hasZ3Expr("q")
-		         && z3Mgr->getEvalExpr(z3Mgr->loadValue(z3Mgr->getZ3Expr("q")) == z3Mgr->getZ3Expr(10)).is_true();
+		z3Mgr->test3(); // mutiple-level pointers
+		// assert(x==10);
+		z3::expr q = (z3Mgr->getZ3Expr("x") == z3Mgr->getZ3Expr(10));
+		bool res1 = checkNegateAssert(z3Mgr, q);
+		bool res2 = z3Mgr->hasZ3Expr("q") && z3Mgr->z3Expr2NumValue(z3Mgr->loadValue(z3Mgr->getZ3Expr("q"))) == 10;
+		result = res1 && res2;
 	}
 	else if (test_name == "test4") {
 		z3Mgr->test4();
@@ -101,7 +129,7 @@ int main(int argc, char** argv) {
 		std::cout << test_name << " passed!!" << std::endl;
 	}
 	else {
-		std::cout << SVFUtil::errMsg(test_name)
+		std::cout << SVFUtil::errMsg("The test-") << SVFUtil::errMsg(test_name)
 		          << SVFUtil::errMsg(" assertion is unsatisfiable!!") << std::endl;
 		assert(result);
 	}

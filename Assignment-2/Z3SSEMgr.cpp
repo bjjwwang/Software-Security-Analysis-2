@@ -67,7 +67,7 @@ z3::expr Z3SSEMgr::createExprForObjVar(const ObjVar* objVar) {
 			else if (obj->isConstantArray() || obj->isConstantStruct())
 				assert(false && "implement this part");
 			else {
-				/// For llvm's own intrinsics `memcpy` instruction which can introduces new objects. 
+				/// For llvm intrinsics `memcpy` instruction which introduces the new object.
 				e = ctx.int_val(getVirtualMemAddress(objVar->getId()));
 			}
 		}
