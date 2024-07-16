@@ -49,6 +49,46 @@ namespace SVF {
 		std::string msg_;
 	};
 
+	class AEState: public AbstractState {
+	 public:
+		AbstractValue loadValue(NodeID varId) {
+			AbstractValue res;
+			for (auto addr : (*this)[varId].getAddrs()) {
+				res.join_with(load(addr)); // q = *p
+			}
+			return res;
+		}
+
+		void storeValue(NodeID varId, AbstractValue val) {
+			for (auto addr : (*this)[varId].getAddrs()) {
+				store(addr, val); // *p = q
+			}
+		}
+
+		AEState widening(const AEState& other) {
+			AbstractState widened = AbstractState::widening(other);
+			return AEState(static_cast<const AEState&>(widened));
+		}
+
+		AEState narrowing(const AEState& other) {
+			AbstractState narrowed = AbstractState::narrowing(other);
+			return AEState(static_cast<const AEState&>(narrowed));
+		}
+
+		/// Get the byte offset interval for a given abstract state and GEP statement
+		IntervalValue getByteOffset(const GepStmt* gep);
+
+		/// Get the interval value of an element index for a given abstract state and GEP statement
+		IntervalValue getElementIndex(const GepStmt* gep);
+
+		/// Initialize an object variable in the abstract state
+		void initObjVar(ObjVar* objVar);
+
+		/// Get the address values for a range of offsets for a GEP (GetElementPtr) object
+		AddressValue getGepObjAddrs(NodeID rhs, IntervalValue offset);
+
+	};
+
 	class AbstractExecutionHelper {
 	 public:
 		/// Add a detected bug to the bug reporter and print the report
@@ -166,16 +206,6 @@ namespace SVF {
 		void updateStateOnSelect(const SelectStmt* select);
 		///@}
 
-		/// Initialize an object variable in the abstract state
-		void initObjVar(AbstractState& as, ObjVar* objVar);
-
-		/// Get the address value for a GEP (GetElementPtr) object
-		AddressValue getGepObjAddress(AbstractState& es, u32_t pointer, APOffset offset);
-		/// Get the byte offset interval for a given abstract state and GEP statement
-		IntervalValue getByteOffset(const AbstractState& es, const GepStmt* gep);
-		/// Get the interval value of an element index for a given abstract state and GEP statement
-		IntervalValue getElementIndex(const AbstractState& es, const GepStmt* gep);
-
 		/// Handle stub functions for verifying abstract interpretation results
 		void handleStubFunctions(const CallICFGNode* call);
 
@@ -186,18 +216,18 @@ namespace SVF {
 
 		/// Path feasiblity handling
 		///@{
-		bool mergeStatesFromPredecessors(const ICFGNode* curNode, AbstractState& as);
+		bool mergeStatesFromPredecessors(const ICFGNode* curNode, AEState& as);
 
-		bool isCmpBranchFeasible(const CmpStmt* cmpStmt, s64_t succ, AbstractState& as);
-		bool isSwitchBranchFeasible(const SVFVar* var, s64_t succ, AbstractState& as);
-		bool isBranchFeasible(const IntraCFGEdge* intraEdge, AbstractState& as);
+		bool isCmpBranchFeasible(const CmpStmt* cmpStmt, s64_t succ, AEState& as);
+		bool isSwitchBranchFeasible(const SVFVar* var, s64_t succ, AEState& as);
+		bool isBranchFeasible(const IntraCFGEdge* intraEdge, AEState& as);
 		///@}
 
 		/// Handle a call site in the control flow graph
 		void handleCallSite(const CallICFGNode* callnode);
 
 		/// Return its abstract state given an ICFGNode
-		AbstractState& getAbsState(const ICFGNode* node) {
+		AEState& getAbsState(const ICFGNode* node) {
 			const ICFGNode* repNode = _icfg->getRepNode(node);
 			if (_postAbsTrace.count(repNode) == 0)
 				assert(0 && "No preAbsTrace for this node");
@@ -223,9 +253,9 @@ namespace SVF {
 		/// A set of functions which are involved in recursions
 		Set<const SVFFunction*> _recursiveFuns;
 		/// Abstract trace immediately before an ICFGNode.
-		Map<const ICFGNode*, AbstractState> _preAbsTrace;
+		Map<const ICFGNode*, AEState> _preAbsTrace;
 		/// Abstract trace immediately after an ICFGNode.
-		Map<const ICFGNode*, AbstractState> _postAbsTrace;
+		Map<const ICFGNode*, AEState> _postAbsTrace;
 
 	 private:
 		AbstractExecutionHelper _bufOverflowHelper;

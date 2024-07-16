@@ -203,7 +203,7 @@ void AbstractExecution::handleCycleWTO(const ICFGCycleWTO* cycle) {
 	else {
 		return;
 	}
-	AbstractState pre_as = _preAbsTrace[cycle->head()->node()];
+	AEState pre_as = _preAbsTrace[cycle->head()->node()];
 	// set -widen-delay
 	s32_t widen_delay = Options::WidenDelay();
 	bool increasing = true;
@@ -216,7 +216,7 @@ void AbstractExecution::updateStateOnCopy(const CopyStmt* copy) {
 	/// TODO: your code starts from here
 }
 
-void AbstractExecution::updateStateOnBinary(const BinaryOPStmt* binary) {
+void AbstractExecution::updateStateOnBinary(const BinaryOPStmt* binary)  {
 	/// TODO: your code starts from here
 }
 
@@ -235,15 +235,15 @@ void AbstractExecution::updateStateOnGep(const GepStmt* gep) {
 /// Abstract state updates on an AddrStmt
 void AbstractExecution::updateStateOnAddr(const AddrStmt* addr) {
 	const ICFGNode* node = addr->getICFGNode();
-	AbstractState& as = getAbsState(node);
-	initObjVar(as, SVFUtil::cast<ObjVar>(addr->getRHSVar()));
+	AEState& as = getAbsState(node);
+	as.initObjVar(SVFUtil::cast<ObjVar>(addr->getRHSVar()));
 	as[addr->getLHSVarID()] = as[addr->getRHSVarID()];
 }
 
 /// Abstract state updates on an CmpStmt
 void AbstractExecution::updateStateOnCmp(const CmpStmt* cmp) {
 	const ICFGNode* node = cmp->getICFGNode();
-	AbstractState& as = getAbsState(node);
+	AEState& as = getAbsState(node);
 	u32_t op0 = cmp->getOpVarID(0);
 	u32_t op1 = cmp->getOpVarID(1);
 	u32_t res = cmp->getResID();
@@ -381,7 +381,7 @@ void AbstractExecution::updateStateOnCmp(const CmpStmt* cmp) {
 /// Abstract state updates on an CallPE
 void AbstractExecution::updateStateOnCall(const CallPE* call) {
 	const ICFGNode* node = call->getICFGNode();
-	AbstractState& as = getAbsState(node);
+	AEState& as = getAbsState(node);
 	NodeID lhs = call->getLHSVarID();
 	NodeID rhs = call->getRHSVarID();
 	as[lhs] = as[rhs];
@@ -390,7 +390,7 @@ void AbstractExecution::updateStateOnCall(const CallPE* call) {
 /// Abstract state updates on an RetPE
 void AbstractExecution::updateStateOnRet(const RetPE* retPE) {
 	const ICFGNode* node = retPE->getICFGNode();
-	AbstractState& as = getAbsState(node);
+	AEState& as = getAbsState(node);
 	NodeID lhs = retPE->getLHSVarID();
 	NodeID rhs = retPE->getRHSVarID();
 	as[lhs] = as[rhs];
@@ -399,7 +399,7 @@ void AbstractExecution::updateStateOnRet(const RetPE* retPE) {
 /// Abstract state updates on an PhiStmt
 void AbstractExecution::updateStateOnPhi(const PhiStmt* phi) {
 	const ICFGNode* node = phi->getICFGNode();
-	AbstractState& as = getAbsState(node);
+	AEState& as = getAbsState(node);
 	u32_t res = phi->getResID();
 	AbstractValue rhs;
 	for (u32_t i = 0; i < phi->getOpVarNum(); i++) {
@@ -412,7 +412,7 @@ void AbstractExecution::updateStateOnPhi(const PhiStmt* phi) {
 /// Abstract state updates on an SelectStmt
 void AbstractExecution::updateStateOnSelect(const SelectStmt* select) {
 	const ICFGNode* node = select->getICFGNode();
-	AbstractState& as = getAbsState(node);
+	AEState& as = getAbsState(node);
 	u32_t res = select->getResID();
 	u32_t tval = select->getTrueValue()->getId();
 	u32_t fval = select->getFalseValue()->getId();
@@ -421,7 +421,7 @@ void AbstractExecution::updateStateOnSelect(const SelectStmt* select) {
 		as[res] = as[cond].getInterval().is_zero() ? as[fval] : as[tval];
 	}
 	else {
-		as[res] = as[tval];
+		as[res].join_with(as[tval]);
 		as[res].join_with(as[fval]);
 	}
 }
@@ -436,7 +436,7 @@ void AbstractExecution::updateStateOnSelect(const SelectStmt* select) {
  */
 void AbstractExecution::handleCallSite(const CallICFGNode* callNode) {
 	// Get the abstract state associated with the call node
-	AbstractState& as = getAbsState(callNode);
+	AEState& as = getAbsState(callNode);
 
 	// Get the callee function associated with the call site
 	const SVFFunction* callee = SVFUtil::getCallee(callNode->getCallSite());
@@ -448,7 +448,6 @@ void AbstractExecution::handleCallSite(const CallICFGNode* callNode) {
 	else {
 		// Push the call node onto the call site stack
 		_callSiteStack.push_back(callNode);
-
 		// Handle the callee function
 		ICFGWTO* wto = _funcToWTO[callee];
 		handleWTOComponents(wto->getWTOComponents());
@@ -477,7 +476,7 @@ void AbstractExecution::handleStubFunctions(const SVF::CallICFGNode* callnode) {
 		const CallICFGNode* callNode =
 		    SVFUtil::dyn_cast<CallICFGNode>(_svfir->getICFG()->getICFGNode(cs.getInstruction()));
 		u32_t arg0 = _svfir->getValueNode(cs.getArgument(0));
-		AbstractState& as = getAbsState(callNode);
+		AEState& as = getAbsState(callNode);
 
 		// Check if the interval for the argument is infinite
 		if (as[arg0].getInterval().is_infinite()) {
@@ -510,7 +509,7 @@ void AbstractExecution::handleStubFunctions(const SVF::CallICFGNode* callnode) {
 		u32_t arg0 = _svfir->getValueNode(cs.getArgument(0));
 		u32_t arg1 = _svfir->getValueNode(cs.getArgument(1));
 
-		AbstractState& as = getAbsState(callnode);
+		AEState& as = getAbsState(callnode);
 		AbstractValue gepRhsVal = as[arg0];
 
 		// Check if the RHS value is an address
@@ -518,7 +517,7 @@ void AbstractExecution::handleStubFunctions(const SVF::CallICFGNode* callnode) {
 			bool overflow = false;
 			for (const auto& addr : gepRhsVal.getAddrs()) {
 				u64_t access_offset = as[arg1].getInterval().getIntNumeral();
-				NodeID objId = AbstractState::getInternalID(addr);
+				NodeID objId = AEState::getInternalID(addr);
 				const GepObjVar* gepLhsObjVar = SVFUtil::cast<GepObjVar>(_svfir->getGNode(objId));
 				auto size = _svfir->getBaseObj(objId)->getByteSizeOfObj();
 				if (_bufOverflowHelper.hasGepObjOffsetFromBase(gepLhsObjVar)) {

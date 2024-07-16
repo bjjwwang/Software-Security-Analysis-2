@@ -27,12 +27,53 @@
 #include "AEMgr.h"
 
 namespace SVF {
+	/*
+	// A simple example
 
-	u32_t AbstractExecutionMgr::currentExprIdx = 0;
+	int main() {
+		int* p;
+		int q;
+		int* r;
+		int x;
+
+		p = malloc1(..);
+		q = 5;
+		*p = q;
+		x = *p;
+		assert(x==10);
+	}
+	*/
+	void AbstractExecutionMgr::test0(){
+
+		//  int** p;
+		NodeID p = getNodeID("p");
+
+		//  int q;
+		NodeID q = getNodeID("q");
+
+		//  int* r;
+		NodeID r = getNodeID("r");
+
+		//  int x;
+		NodeID x = getNodeID("x");
+
+		// p = malloc(..);
+		NodeID malloc = getNodeID("malloc");
+		as[p] = AddressValue(getMemObjAddress("malloc"));
+
+		// q = 5;
+		as[q] = IntervalValue(5, 5);
+
+		// *p = q;
+		as.storeValue(p, as[q]);
+
+		// x = *p;
+		as[x] = as.loadValue(p);
+	}
 
 	//    int main() {
-	//        int a;  ID 0
-	//        int b;  ID 1
+	//        int a;
+	//        int b;
 	//        a = 0;
 	//        b = a + 1;
 	//        assert(b>0);
@@ -42,7 +83,6 @@ namespace SVF {
 		NodeID b = getNodeID("b");
 		/// TODO: your code starts from here
 
-		svf_assert(as[b].getInterval() > IntervalValue(0, 0));
 	}
 
 	//        int main() {
@@ -63,7 +103,6 @@ namespace SVF {
 		NodeID b = getNodeID("b");
 		/// TODO: your code starts from here
 
-		svf_assert(as[b].getInterval() > IntervalValue(3, 3));
 	}
 
 	//    int main() {
@@ -87,7 +126,6 @@ namespace SVF {
 		NodeID x = getNodeID("x");
 		/// TODO: your code starts from here
 
-		svf_assert(as[x].getInterval() == IntervalValue(10, 10));
 	}
 
 	//        int* p;
@@ -111,7 +149,6 @@ namespace SVF {
 		NodeID b = getNodeID("b");
 		/// TODO: your code starts from here
 
-		svf_assert(as[a].getInterval() + as[b].getInterval() > IntervalValue(20, 20));
 	}
 
 	//// Struct and pointers
@@ -145,7 +182,6 @@ namespace SVF {
 		NodeID y = getNodeID("y");
 		NodeID z = getNodeID("z");
 
-		svf_assert(as[z].getInterval() == IntervalValue(15, 15));
 	}
 
 	//    int main(int argv) {  // argv is an interval  [4, 10]
@@ -163,7 +199,6 @@ namespace SVF {
 		NodeID argv = getNodeID("argv");
 		/// TODO: your code starts from here
 
-		svf_assert(as[b].getInterval() >= IntervalValue(5, 5));
 	}
 
 	// int foo(int z) {
@@ -182,10 +217,7 @@ namespace SVF {
 		NodeID y = getNodeID("y");
 		/// TODO: your code starts from here
 
-		AbstractValue cmp1 = as[x].getInterval() == IntervalValue(3, 3);
-		AbstractValue cmp2 = as[y].getInterval() == IntervalValue(2, 2);
-		cmp1.meet_with(cmp2);
-		svf_assert(cmp1);
+
 	}
 
 	// int main() {
@@ -201,7 +233,6 @@ namespace SVF {
 		NodeID x = getNodeID("x");
 		/// TODO: your code starts from here
 
-		svf_assert(as[x].getInterval() == IntervalValue(0, 0));
 	}
 
 } // namespace SVF
