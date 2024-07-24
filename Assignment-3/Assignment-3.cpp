@@ -40,6 +40,9 @@ void AbstractExecution::updateStateOnCopy(const CopyStmt* copy) {
 
 void AbstractExecution::updateStateOnBinary(const BinaryOPStmt* binary) {
 	/// TODO: your code starts from here
+	/// Find the comparison predicates in "class BinaryOPStmt:OpCode" under SVF/svf/include/SVFIR/SVFStatements.h
+	/// You are only required to handle integer predicates, including Add, FAdd, Sub, FSub, Mul, FMul, SDiv, FDiv, UDiv,
+	/// SRem, FRem, URem, Xor, And, Or, AShr, Shl, LShr
 
 }
 
