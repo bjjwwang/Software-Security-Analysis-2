@@ -9,8 +9,7 @@ void CWE121_Stack_Based_Buffer_Overflow__CWE129_rand_01_bad() {
     /* Initialize data */
     data = -1;
     /* POTENTIAL FLAW: Set data to a random value */
-    srand((unsigned)time(NULL)); // Seed the random number generator
-    data = rand() % 100; // Simulating RAND32() to generate a value between 0 and 99
+    data = 9999 % 100; // Simulating RAND32() to generate a maximum value of 99
 
     int i;
     int buffer[10] = { 0 };
