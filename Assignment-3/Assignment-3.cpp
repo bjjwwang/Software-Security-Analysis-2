@@ -38,6 +38,9 @@ void AbstractExecution::updateStateOnCopy(const CopyStmt* copy) {
 
 }
 
+/// Find the comparison predicates in "class BinaryOPStmt:OpCode" under SVF/svf/include/SVFIR/SVFStatements.h
+/// You are required to handle predicates (The program is assumed to have signed ints and also interger-overflow-free),
+/// including Add, FAdd, Sub, FSub, Mul, FMul, SDiv, FDiv, UDiv, SRem, FRem, URem, Xor, And, Or, AShr, Shl, LShr
 void AbstractExecution::updateStateOnBinary(const BinaryOPStmt* binary) {
 	/// TODO: your code starts from here
 	/// Find the comparison predicates in "class BinaryOPStmt:OpCode" under SVF/svf/include/SVFIR/SVFStatements.h
@@ -487,7 +490,6 @@ void AbstractExecution::handleStubFunctions(const SVF::CallICFGNode* callnode) {
 			assert(false);
 		}
 		else {
-			as[arg0].getInterval().meet_with(IntervalValue(1, 1));
 			if (as[arg0].getInterval().equals(IntervalValue(1, 1))) {
 				std::stringstream ss;
 				ss << "The assertion (" << callnode->toString() << ")"
