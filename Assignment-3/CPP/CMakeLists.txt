@@ -17,6 +17,19 @@ set_target_properties(ass3 PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 
+# Top-level Tests/*.ll — the three public cases the course repo ships
+# (stmt.ll, buf_overflow.ll, null_deref.ll).  Registered separately from
+# the categorised cases/ corpus so the public smoke tests still run in CI
+# when the cases/ subtree is absent (e.g. on the teaching/template repo).
+file(GLOB public_ae_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/../Tests "${CMAKE_CURRENT_SOURCE_DIR}/../Tests/*.ll")
+foreach(filename ${public_ae_files})
+    add_test(
+            NAME ass3-public-cpp/${filename}
+            COMMAND ass3 ${CMAKE_CURRENT_SOURCE_DIR}/../Tests/${filename}
+            WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+    )
+endforeach()
+
 # loops over ae_assert_files and run "ae $bc_file"
 file(GLOB ae_assert_files RELATIVE ${CMAKE_CURRENT_SOURCE_DIR}/../Tests "${CMAKE_CURRENT_SOURCE_DIR}/../Tests/ae/*.ll")
 foreach(filename ${ae_assert_files})
