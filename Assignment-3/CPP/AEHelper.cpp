@@ -156,14 +156,13 @@ void AEHelper::initWTO() {
 ///   - UNSAFE_PTRDEREF / SAFE_PTRDEREF    : null-deref ground truth
 ///   - UNSAFE_BUFACCESS / SAFE_BUFACCESS  : buffer-access ground truth
 ///
-/// Additionally requires that the number of reported bugs is at least the
-/// number of UNSAFE_* stubs in the program.
 void AEHelper::ensureAllAssertsValidated() {
 	static const Set<std::string> kAssertStubs = {"svf_assert", "svf_assert_eq"};
 	static const Set<std::string> kCheckpointStubs = {
 	    "UNSAFE_PTRDEREF", "SAFE_PTRDEREF",
 	    "UNSAFE_BUFACCESS", "SAFE_BUFACCESS"};
-	u32_t unsafe_to_be_verified = 0;
+	Set<std::string> checkpointKinds;
+	Map<std::string, u32_t> expectedReports;
 	for (auto it = svfir->getICFG()->begin(); it != svfir->getICFG()->end(); ++it) {
 		const ICFGNode* node = it->second;
 		const CallICFGNode* call = SVFUtil::dyn_cast<CallICFGNode>(node);
@@ -177,8 +176,6 @@ void AEHelper::ensureAllAssertsValidated() {
 		const bool isCheckpointStub = kCheckpointStubs.count(name) > 0;
 		if (!isAssertStub && !isCheckpointStub)
 			continue;
-		if (name.rfind("UNSAFE_", 0) == 0)
-			unsafe_to_be_verified++;
 		if (!bugReporter.isAssertionPoint(call)) {
 			std::stringstream ss;
 			ss << "The stub function callsite (" << name
@@ -187,15 +184,32 @@ void AEHelper::ensureAllAssertsValidated() {
 			std::cerr << ss.str() << std::endl;
 			assert(false);
 		}
+		if (isCheckpointStub) {
+			const std::string kind =
+			    name.find("BUFACCESS") != std::string::npos
+			        ? "buffer-overflow"
+			        : "nullptr-deref";
+			checkpointKinds.insert(kind);
+			if (name.rfind("UNSAFE_", 0) == 0)
+				++expectedReports[kind];
+		}
 	}
-
-	assert(unsafe_to_be_verified <= bugReporter.getBugReporter().getBugSet().size() &&
-		       "The number of UNSAFE_* stubs (ground truth) should <= the number of bugs reported");
+	for (const std::string& kind : checkpointKinds) {
+		u32_t actualReports = 0;
+		for (const auto& report : bugReporter.getReports()) {
+			if (report.kind == kind)
+				++actualReports;
+		}
+		const u32_t expected = expectedReports[kind];
+		assert(((expected == 0 && actualReports == 0) ||
+		        (expected > 0 && actualReports >= expected)) &&
+		       "SAFE/UNSAFE checkpoint report count mismatch");
+	}
 }
 
 // ---------------------------------------------------------------------------
-// Ground-truth helpers used by handleCheckpointStubs.  Computed from SVF
-// primitives only so the stub verdict cannot be biased by student bugs.
+// Legacy fixture predicates. Checkpoint grading deliberately does not use
+// these to create reports; reports must come from the student's checker.
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -241,32 +255,9 @@ bool harnessSafeDeref(AbstractState& as, const ValVar* value) {
 }
 } // namespace
 
-/// Validate the SAFE/UNSAFE checkpoint stub functions.  Validation uses the
-/// harness-only `harnessSafeAccess` / `harnessSafeDeref` helpers, NOT the
-/// student's `canSafelyAccessMemory` / `canSafelyDerefPtr` — so the stub
-/// verdict cannot be biased by student bugs.
+/// Record that the student's control flow reached a SAFE/UNSAFE checkpoint.
 void AEHelper::handleCheckpointStubs(const CallICFGNode* callNode) {
 	bugReporter.noteAssertionPoint(callNode);
-	const std::string fun_name = callNode->getCalledFunction()->getName();
-	if (fun_name == "SAFE_BUFACCESS" || fun_name == "UNSAFE_BUFACCESS") {
-		if (callNode->arg_size() < 2)
-			return;
-		AEState& as = getAEState(callNode);
-		IntervalValue len = as[callNode->getArgument(1)->getId()].getInterval();
-		if (len.isBottom())
-			len = IntervalValue(0);
-		const ValVar* ptr = callNode->getArgument(0);
-		if (!harnessSafeAccess(as, svfir, ptr, len - IntervalValue(1)))
-			reportBufOverflow(callNode);
-	}
-	else if (fun_name == "SAFE_PTRDEREF" || fun_name == "UNSAFE_PTRDEREF") {
-		if (callNode->arg_size() < 1)
-			return;
-		AEState& as = getAEState(callNode);
-		const ValVar* ptr = callNode->getArgument(0);
-		if (!harnessSafeDeref(as, ptr))
-			reportNullDeref(callNode);
-	}
 }
 
 /// Handle the abstract-state assertion stubs.  `svf_assert(expr)` requires the

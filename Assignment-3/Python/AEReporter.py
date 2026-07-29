@@ -18,7 +18,7 @@ class AEReporter:
     """
 
     def __init__(self, svfir: pysvf.SVFIR):
-        # Map ICFGNode -> diagnostic message for each detected bug.
+        # Map (bug kind, ICFGNode) -> diagnostic message.
         self.node_to_bug_info = {}
         self.svfir = svfir
         # Harness bookkeeping: stub call sites the analysis actually reached.
@@ -52,7 +52,10 @@ class AEReporter:
         return AEState(unwrap_state(abstract_state)).getAllocaInstByteSize(addr)
 
     def reportBufOverflow(self, node, msg):
-        self.node_to_bug_info[node] = msg
+        self.node_to_bug_info[("buffer-overflow", node)] = msg
+
+    def reportNullDeref(self, node, msg):
+        self.node_to_bug_info[("nullptr-deref", node)] = msg
 
     def printReport(self):
         if not self.node_to_bug_info:
@@ -60,8 +63,8 @@ class AEReporter:
         print("###################### Bug Reports ({} total) ######################".format(
             len(self.node_to_bug_info)))
         print("---------------------------------------------")
-        for node, msg in self.node_to_bug_info.items():
-            print(f"{node}: {msg}\n---------------------------------------------")
+        for (kind, node), msg in self.node_to_bug_info.items():
+            print(f"{kind}: {node}: {msg}\n---------------------------------------------")
 
     def getElementSize(self, var: pysvf.SVFVar) -> int:
         if var.getType().isArrayTy():
